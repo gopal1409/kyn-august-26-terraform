@@ -1,0 +1,40 @@
+###on your rdp you need to create a folder tf-project
+  ##then open visual studio code
+  ###click on the file 
+  #enable autosave option
+  #once enable autosave option
+  ##again click on file open folder---select desctop select your tf-project folder
+  ##inside the folder we will create a provider.tf file inside that we need to add this content
+  terraform {
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "=5.0.0" #always provide the proiver version to avoid breaking changes in the future
+    }
+  }
+}
+
+# Configure the Microsoft Azure Provider
+provider "azurerm" {
+  features {}
+}
+
+###create another file resource.tf
+  resource "azurerm_resource_group" "myrg" {
+  name     = "gopal-rg" ##replace the same with your own name
+  location = "eastus"
+}
+
+###at the top in visual studio code you will have after the run there is new terminal click on it
+  terraform init
+  ##teraform init will create a .terraform folder
+  ###then
+  terraform validate
+  #then do terraform plan check what error you are geeting
+  ##paste thos3 4 environment varaibles in terminale
+  terraform plan
+  terraform apply
+  terraform destroy
+
+
+  
