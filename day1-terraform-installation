@@ -1,0 +1,11 @@
+###we will open powershell in admin mode.
+  #we will install choco package manager
+  Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+  ####once you install choco 
+  refreshenv
+  exit
+  #again start powershell in admin mode
+  choco install git
+  choco install terraform
+  choco install azure-cli
+  choco install vscode
