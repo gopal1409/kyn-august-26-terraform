@@ -35,6 +35,23 @@ provider "azurerm" {
   terraform plan
   terraform apply
   terraform destroy
+##create a file vnet.tf copy line 39 till 45
+resource "azurerm_virtual_network" "example" { #change the refrence block
+  name                = "example-network" #change the name of the network
+  location            = azurerm_resource_group.example.location #map it with your rsource group
+  resource_group_name = azurerm_resource_group.example.name
+  address_space       = ["10.0.0.0/16"]
+ 
+}
+
+##create another file subnet.tf copy line 48 till 55
+resource "azurerm_subnet" "example" { #change the refrence block
+  name                 = "example-subnet" #change the name of the subnet
+  resource_group_name  = azurerm_resource_group.example.name #change the refrence to your rg
+  virtual_network_name = azurerm_virtual_network.example.name #change the refrence to your vnet
+  address_prefixes     = ["10.0.1.0/24"]
 
 
-  
+}
+  ###after doing this terraform plan 
+terraform apply 
