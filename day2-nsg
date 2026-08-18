@@ -38,4 +38,18 @@ resource "azurerm_network_security_rule" "web_nsg" {
   resource_group_name         = azurerm_resource_group.myrg.name
   network_security_group_name = azurerm_network_security_group.web_nsg.name
 }
+###csv file
+Azure NSG rules support destination ports/ranges, protocols, priorities, directions, and Allow/Deny actions.
 
+1. ports.csv
+name,priority,port,protocol,direction,access
+allow-ssh,100,22,Tcp,Inbound,Allow
+allow-http,110,80,Tcp,Inbound,Allow
+allow-https,120,443,Tcp,Inbound,Allow
+allow-app,130,8080,Tcp,Inbound,Allow
+2. Read the CSV in Terraform
+Create locals.tf:
+
+locals {
+  ports = csvdecode(file("${path.module}/ports.csv"))
+}
