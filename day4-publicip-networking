@@ -1,4 +1,4 @@
-##create a new file publicip.tf copy from line 2 till 9
+##create a new file publicip.tf copy from line 2 till 12
   resource "azurerm_public_ip" "web_public_ip" {
   name                =  "${local.name_prefix}-public-ip" #gopal-public-ip
   resource_group_name = azurerm_resource_group.myrg.name       
@@ -7,7 +7,9 @@
   sku = "Standard" #basic #premium
   tags = local.project_tags
 }
-
+output "publicip" {
+  value = azurerm_public_ip.web_public_ip.ip_address
+}
 ###create another file network.tf copy from line 12 till 23
   resource "azurerm_network_interface" "web_nic" {
   name                = "${local.name_prefix}-nic"
