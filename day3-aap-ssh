@@ -1,9 +1,9 @@
 #in the terminal run this command which will generate the ssh key
-  18 mkdir ssh-keys                                                                                                        
-  19 cd .\ssh-keys\ 
+ mkdir ssh-keys                                                                                                        
+  cd .\ssh-keys\ 
   #just press enter enter dont give any passpharses
-  20 ssh-keygen -m PEM -t rsa -b 4096 -C "azureuser@myserver" -f terraform-azure.pem                                       
-  21 cd .. 
+  ssh-keygen -m PEM -t rsa -b 4096 -C "azureuser@myserver" -f terraform-azure.pem                                       
+  cd .. 
   ###once generate you can see it in your visual studio code
 
  ###inside your terraform project folder create a folder app inside the folder create a file app.sh #inside the file copy from line 10 till 14
