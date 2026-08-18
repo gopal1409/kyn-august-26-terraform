@@ -17,7 +17,7 @@
  
 }
 
-##################inside subnet.tf copy from line 22 till 30
+##################inside subnet.tf delete everything copy from line 22 till 30
   #subnet need two information
 # vnet name and resource group 
 resource "azurerm_subnet" "web_subnet" {
