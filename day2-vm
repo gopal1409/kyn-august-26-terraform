@@ -1,0 +1,49 @@
+##create a new file vm.tf inside the file copy from line 2 till 30
+  resource "azurerm_linux_virtual_machine" "web_vm" {
+  name                = "${local.name_prefix}-vm"
+  location            = azurerm_resource_group.myrg.location
+  resource_group_name = azurerm_resource_group.myrg.name
+  size                = "Standard_D2s_v3"
+  admin_username      = "azureuser"
+  network_interface_ids = [
+    azurerm_network_interface.web_nic.id, #public ip private ip and nsg
+  ]
+  #admin_password = "Admin@12345678"
+  admin_ssh_key {
+    username   = "azureuser"
+    public_key = file("${path.module}/ssh-keys/terraform-azure.pem.pub")
+    #it is an meta argument in terraform which will look for this file in the current directory  
+  }
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+  }
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-server-jammy"
+    sku       = "22_04-lts"
+    version   = "latest"
+  }
+  custom_data = filebase64("${path.module}/app/app.sh")
+}
+
+####apply it 
+  terraform apply 
+  ###you will get the public ip 
+  #####first we will login inside the instance
+   cd .\ssh-keys\                          
+  ##change the public ip to your ip address
+  ssh -i .\terraform-azure.pem azureuser@172.178.68.80 
+  ##it will ask for yes 
+  ##once login you can test your page
+  curl localhost
+  exit
+  cd ..
+  ###again copy the public ip and paste it in the browser
+  ##graph it 
+  terraform graph
+  ##copy the whole output 
+  ##paste it in this site
+  https://dreampuf.github.io/GraphvizOnline/
