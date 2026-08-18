@@ -1,4 +1,4 @@
-##create a new file nsg.tf
+##create a new file nsg.tf copy paste from line 5 till 16
   
   ##we need to create an nsg
 
