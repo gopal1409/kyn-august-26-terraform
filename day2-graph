@@ -1,0 +1,5 @@
+##lets visualized the graph
+  #run the command 
+  terraform graph
+####copy the whole output and paste it inside this site
+  https://dreampuf.github.io/GraphvizOnline/
