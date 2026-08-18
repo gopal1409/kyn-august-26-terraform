@@ -91,3 +91,275 @@ variable "owner" {
   terraform apply 
   ###check the resource are created with your name and prefix
   
+1. Terraform configuration files
+File	Purpose
+resource.tf	Creates the Azure Resource Group
+vnet.tf	Creates the Virtual Network
+subnet.tf	Creates the Subnet
+generic-variables.tf	Defines input variables
+private-variables.tf	Defines local values
+2. What is a Terraform Variable?
+
+A variable is an input to your Terraform configuration.
+
+For example:
+
+variable "location" {
+  description = "location where resource will be created"
+  type        = string
+  default     = "eastus"
+}
+
+You use it inside a resource with:
+
+location = var.location
+
+So:
+
+variable "location"
+       ↓
+   var.location
+       ↓
+     eastus
+       ↓
+Azure Resource
+Why use variables?
+
+Instead of hardcoding:
+
+location = "eastus"
+
+you can write:
+
+location = var.location
+
+Now the same Terraform code can be used for:
+
+Development → eastus
+Testing     → westus
+Production  → centralus
+
+without modifying the resource code.
+
+3. What is a Local Block?
+
+A locals block creates named expressions that you can reuse inside your Terraform configuration.
+
+Your example:
+
+locals {
+  name_prefix = "${var.environment}-${var.owner}"
+
+
+  project_tags = {
+    Environment = "dev"
+    Owner       = "002"
+    project     = "dispatch"
+  }
+}
+
+The important point is:
+
+locals
+   │
+   ├── name_prefix
+   │
+   └── project_tags
+
+You access them using:
+
+local.name_prefix
+
+and:
+
+local.project_tags
+Example
+
+If:
+
+environment = "dev"
+owner       = "gopal"
+
+then:
+
+name_prefix = "${var.environment}-${var.owner}"
+
+produces:
+
+dev-gopal
+
+Then this:
+
+name = "${local.name_prefix}-${var.resource_group_name}"
+
+could produce:
+
+dev-gopal-gopal-rg
+4. Variable vs Local
+Variable	Local
+Input to Terraform	Named expression inside Terraform
+Can be supplied by user	Calculated/defined inside configuration
+var.location	local.name_prefix
+Useful for customization	Useful for reuse
+Example: eastus	Example: dev-gopal
+
+Think of it simply as:
+
+VARIABLE
+   ↓
+Input
+
+
+LOCAL
+   ↓
+Process / combine / reuse
+
+For example:
+
+variable "environment" {
+  default = "dev"
+}
+
+
+variable "owner" {
+  default = "gopal"
+}
+
+
+locals {
+  name_prefix = "${var.environment}-${var.owner}"
+}
+
+Result:
+
+environment ──┐
+              ├──> local.name_prefix ──> dev-gopal
+owner ────────┘
+5. Resource Reference Block
+
+Your resource is:
+
+resource "azurerm_resource_group" "myrg" {
+  name     = "${local.name_prefix}-${var.resource_group_name}"
+  location = var.location
+  tags     = local.project_tags
+}
+
+Here:
+
+resource "azurerm_resource_group" "myrg"
+
+has two important names:
+
+azurerm_resource_group
+        ↓
+Terraform resource type
+
+
+myrg
+ ↓
+User-defined reference name
+
+Therefore:
+
+azurerm_resource_group.myrg.name
+
+means:
+
+Get the name attribute of the Resource Group represented by the myrg reference.
+
+6. Resource-to-Resource Dependency
+
+Your VNet contains:
+
+location = azurerm_resource_group.myrg.location
+
+
+resource_group_name = azurerm_resource_group.myrg.name
+
+Terraform understands that the VNet depends on the Resource Group.
+
+The relationship becomes:
+
+Resource Group
+      │
+      ▼
+Virtual Network
+      │
+      ▼
+Subnet
+
+This is one of the major advantages of Terraform: you reference resources rather than manually determining their creation order.
+
+7. Complete Execution Workflow
+
+Use this sequence in your lab:
+
+1. Edit Terraform files
+        ↓
+2. Define variables
+        ↓
+3. Define locals
+        ↓
+4. terraform init
+        ↓
+5. terraform validate
+        ↓
+6. terraform plan
+        ↓
+7. Review the plan
+        ↓
+8. terraform apply
+        ↓
+9. Azure creates:
+       ├── Resource Group
+       ├── Virtual Network
+       └── Subnet
+        ↓
+10. Verify in Azure Portal
+
+If you are intentionally changing an existing environment, you can first run:
+
+terraform destroy
+
+and then:
+
+terraform apply
+
+For normal Terraform changes, however, you generally do not need to destroy everything first. terraform plan will show what Terraform intends to change.
+
+Key concept
+var.*     → INPUT VALUES
+
+
+local.*   → REUSABLE/CALCULATED VALUES
+
+
+resource.*.* → REFERENCES TO CREATED RESOURCES
+
+So your configuration effectively works like:
+
+generic-variables.tf
+        │
+        ▼
+    var.location
+    var.owner
+    var.environment
+        │
+        ▼
+private-variables.tf
+        │
+        ▼
+local.name_prefix
+local.project_tags
+        │
+        ▼
+resource.tf / vnet.tf / subnet.tf
+        │
+        ▼
+      Terraform
+        │
+        ▼
+       Azure
+
+This is the core concept behind making Terraform code dynamic, reusable, consistent, and easier to maintain.
