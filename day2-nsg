@@ -11,8 +11,8 @@ resource "azurerm_network_security_group" "web_nsg" {
 }
 ##this nsg need to be mapped with whom subnet
 resource "azurerm_subnet_network_security_group_association" "web_subnet_nsg_association" {
-  subnet_id                 = azurerm_subnet.example.id  #change it to your subnet refrence block
-  network_security_group_id = azurerm_network_security_group.example.id #change it to your refrence block
+  subnet_id                 = azurerm_subnet.myrg.id  #change it to your subnet refrence block
+  network_security_group_id = azurerm_network_security_group.web_nsg.id #change it to your refrence block
 }
 ##inside the nsg we need to create rules for inbound traffic
 
