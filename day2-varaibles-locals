@@ -1,0 +1,93 @@
+###inside the resource.tf file delete everything and add this from 2 till 8
+  resource "azurerm_resource_group" "myrg" { #what is the purpose of this refrence block? user defined field
+  name     = "${local.name_prefix}-${var.resource_group_name}"
+  #sap-dev-gopal-rg #it will read the local block and get the value of name_prefix
+  location = var.location
+  tags     = local.project_tags
+  #when we call the local block we use local.<name of the local block>.<key name>
+}
+
+###inside vnet.tf delete everything and add this from line 11 till 18
+  resource "azurerm_virtual_network" "vnet" {
+  name                = "${local.name_prefix}-${var.vnet_name}" #gopal-network
+  location            = azurerm_resource_group.myrg.location #it will read your stae file and get the location of resource group
+  resource_group_name = azurerm_resource_group.myrg.name
+  address_space       = var.address_space
+  tags                = local.project_tags
+ 
+}
+
+##################inside subnet.tf copy from line 22 till 30
+  #subnet need two information
+# vnet name and resource group 
+resource "azurerm_subnet" "web_subnet" {
+  name                 = "${local.name_prefix}-${var.subnet_name}" #websubnet-subnet
+  resource_group_name  = azurerm_resource_group.myrg.name
+  virtual_network_name = azurerm_virtual_network.vnet.name
+  address_prefixes     = ["10.0.1.0/24"]
+
+  
+}
+
+####################create a new file generic-varaibles.tf copy from line 33 till 74 change the name in 43 to your name
+  #this is input varaibles
+variable "location" {
+  description = "location where resource will be created" #this is not mendatory
+  type = string
+  default = "eastus"
+}
+
+variable "resource_group_name" {
+  description = "name of the resource group"
+  type = string
+  default = "gopal-rg"
+}
+
+variable "vnet_name" {
+  description = "name of the virtual network"
+  type = string
+  default = "kyn-vnet"
+}
+
+variable "subnet_name" {
+  description = "name of the subnet"
+  type = string
+  default = "websubnet"
+}
+
+variable "address_space" {
+  description = "address space for the virtual network"
+  type = list(string)
+  default = ["10.0.0.0/16"]
+}
+
+variable "environment" {
+  description = "environment for the project"
+  type = string
+  default = "dev"
+}
+
+variable "owner" {
+  description = "owner of the project"
+  type = string
+  default = "sap"
+}
+
+####create a file private-varaibles.tf copy line 77 till 86
+  locals {
+    #named expression
+    name_prefix = "${var.environment}-${var.owner}"
+    #dev-sap
+  project_tags = { #it is the name 
+    Environment = "dev" #expression on key value format seprated by equal to sign
+    Owner = "002"
+    project = "dispatch"
+  }
+}
+#when we define local block we define using locals
+
+  ##first destroy as we are changing the environment
+  terraform destroy
+  terraform apply 
+  ###check the resource are created with your name and prefix
+  
