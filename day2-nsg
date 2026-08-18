@@ -17,4 +17,25 @@ resource "azurerm_subnet_network_security_group_association" "web_subnet_nsg_ass
 ##inside the nsg we need to create rules for inbound traffic
 
 ###do terraform apply see the error which the connection to subnet and security not happen
-  
+  locals {
+  web_nsg_rule = { #named expression
+    "110" :"22", #expression on key value format seprated priority and port number
+    "120" :"80",
+    "130" :"443",
+  }
+}
+resource "azurerm_network_security_rule" "web_nsg" {
+    for_each = local.web_nsg_rule
+  name                        = "Rule_port_${each.key}" #Rule_port_110
+  priority                    = each.key #110
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = each.value #22
+  source_address_prefix       = "*" #0.0.0.0/0
+  destination_address_prefix  = "*"
+  resource_group_name         = azurerm_resource_group.myrg.name
+  network_security_group_name = azurerm_network_security_group.web_nsg.name
+}
+
