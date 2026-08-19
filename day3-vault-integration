@@ -1,0 +1,21 @@
+##create a file vault.tf add line 3 till 17
+  #as we are calling something outside terraform you need a block data block
+data "azurerm_key_vault" "mywinvault" {
+  name = "gopal-win-vault1" #replace this with your vault name
+  resource_group_name = "gopal-vault" #repalce this with your vault resouorce group
+}
+
+#lets check it is reading the vault or not
+output "key_vault_id" {
+    value = data.azurerm_key_vault.mywinvault
+  
+}
+
+data "azurerm_key_vault_secret" "mysecret" {
+    name = "winpass" #change it with your secret name
+  key_vault_id = data.azurerm_key_vault.mywinvault.id
+}
+
+#################################lets modify the win.tf file where you can see the password
+  admin_password = "ChangeThisPassword123!" #which is there in your local system
+  admin_password = data.azurerm_key_vault.mywinvault.id
