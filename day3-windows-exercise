@@ -1,0 +1,70 @@
+##create a file winvm.tf copy line 2 till 3
+  resource "azurerm_windows_virtual_machine" "myvm" {
+  name                = "gopal-win-vm"
+  resource_group_name = azurerm_resource_group.myrg.name
+  location            = azurerm_resource_group.myrg.location
+  size                = "Standard_B2s"
+
+  admin_username = "azureadmin"
+  admin_password = "ChangeThisPassword123!"
+
+  network_interface_ids = [
+    azurerm_network_interface.mynic.id
+  ]
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+  }
+
+  source_image_reference {
+    publisher = "MicrosoftWindowsServer"
+    offer     = "WindowsServer"
+    sku       = "2022-datacenter-azure-edition"
+    version   = "latest"
+  }
+}
+
+#create an install.ps1 file line 
+  Write-Output "Starting Windows VM configuration..."
+
+Install-WindowsFeature -Name Web-Server -IncludeManagementTools
+
+Set-Content `
+    -Path "C:\inetpub\wwwroot\index.html" `
+    -Value "<h1>Hello from Gopal's Terraform Windows VM</h1>"
+
+New-Item `
+    -Path "C:\Terraform" `
+    -ItemType Directory `
+    -Force
+
+Set-Content `
+    -Path "C:\Terraform\deployment.txt" `
+    -Value "This Windows VM was configured using Terraform and PowerShell."
+
+Write-Output "IIS installation completed."
+
+  8. Execute PowerShell from Terraform 
+
+Add this to vm.tf:
+resource "azurerm_virtual_machine_extension" "powershell" {
+  name                 = "windows-configuration"
+  virtual_machine_id   = azurerm_windows_virtual_machine.myvm.id
+
+  publisher            = "Microsoft.Compute"
+  type                 = "CustomScriptExtension"
+  type_handler_version = "1.10"
+
+  settings = jsonencode({
+    fileUris = [
+      "https://raw.githubusercontent.com/YOUR-USER/YOUR-REPO/main/install.ps1"
+    ]
+
+    commandToExecute = "powershell.exe -ExecutionPolicy Unrestricted -File install.ps1"
+  })
+}
+##finally 
+  terraform destroy
+  terraform apply
+  
