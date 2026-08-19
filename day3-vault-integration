@@ -18,4 +18,17 @@ data "azurerm_key_vault_secret" "mysecret" {
 
 #################################lets modify the win.tf file where you can see the password
   admin_password = "ChangeThisPassword123!" #which is there in your local system
-  admin_password = data.azurerm_key_vault.mywinvault.id
+  admin_password = data.azurerm_key_vault_secret.mysecret.value
+##resolve subscription error you need to do the same from cloud shell
+get the Key Vault ID:
+
+az keyvault show \
+  --name gopal-win-vault1 \
+  --resource-group gopal-vault \
+  --query id \
+  --output tsv
+###once you get the vault id 
+az role assignment create \
+  --assignee 69d6c83a-8c5b-4ec4-bf2d-e3c6b833551e \
+  --role "Key Vault Secrets User" \
+  --scope "/subscriptions/73cbb2ca-6092-4ae4-9e58-362b625a3b20/resourceGroups/gopal-vault/providers/Microsoft.KeyVault/vaults/gopal-win-vault1"
