@@ -1,0 +1,31 @@
+##create a new file webserver.tf copy line 2 till 8 
+  variable "instance" {
+  type = map(string)
+  default = {
+    "vm001" = "vm1"
+    "vm002" = "vm2" 
+  }
+}
+
+#once declared we need to modify the public ip.tf file 
+  #below the resource block add for each and change the instance name with each.key
+    for_each = var.instance
+  #for each it pupose is to loop intial value var.instance two value
+  name                =  "${local.name_prefix}-${each.key}-public-ip" #gopal-public-ip
+
+  ###lets modify the network.tf below resource block add foreach and change the name using each.key
+  for_each = var.instance
+  name                = "${local.name_prefix}-${each.key}-nic"
+##3in the ip ocniguration the public ip replace the same with 
+   public_ip_address_id          = azurerm_public_ip.web_public_ip[each.key].id
+  ######finally in vm.tf file
+  for_each = var.instance
+  #replace the name of the vm with each.key
+  name                = "${local.name_prefix}-${each.key}vm"
+
+  #and in the nic card also we need to modify inside vm.tf file
+  network_interface_ids = [
+    azurerm_network_interface.web_nic[each.key].id, #public ip private ip and nsg
+  ]
+
+  ##do terraform apply
