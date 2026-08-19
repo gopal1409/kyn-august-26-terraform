@@ -1,0 +1,11 @@
+##lets create a n azure vault 
+  in azure comsole search for key vault
+  #click on create
+  create a new resource group : gopal-vault you can give you own naming convention
+  ##provide an unique name to your key vault
+  ##finally review and create 
+  #then expand object
+  #click on secret --- generate import secret
+  #give a name to the secret
+  ###in secret value put your password
+  ##then save it
