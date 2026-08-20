@@ -31,3 +31,39 @@ resource "azurerm_lb_backend_address_pool" "web_lb_pool" {
   loadbalancer_id = azurerm_lb.web_lb.id
   name            = "${local.name_prefix}-lb-pool"
 }
+##aftter the backend pool add this 
+
+#we will create the probes they are line doing health checkup
+resource "azurerm_lb_probe" "web_lb_probe" {
+  loadbalancer_id = azurerm_lb.web_lb.id 
+  name = "${local.name_prefix}-lb-probe"
+  protocol = "Tcp"
+  port = 80 #the lb will going to ping your application port 80 every 30 second
+  //request_path = "/var/www/html/index.html"
+  interval_in_seconds = 30
+  number_of_probes = 2 #2 times if it dont respond it will stop sending the traffic to that particular instance
+}
+
+#rules 
+resource "azurerm_lb_rule" "web_lb_rule" {
+  loadbalancer_id = azurerm_lb.web_lb.id 
+  name = "${local.name_prefix}-lb-rule"
+  protocol = "Tcp"
+  frontend_port = 80 #lb port
+  backend_port = 80 #instance port
+  frontend_ip_configuration_name = azurerm_lb.web_lb.frontend_ip_configuration[0].name
+  backend_address_pool_ids = [azurerm_lb_backend_address_pool.web_lb_pool.id]
+  probe_id = azurerm_lb_probe.web_lb_probe.id 
+}
+
+#lets attach nic card with your backpool
+resource "azurerm_network_interface_backend_address_pool_association" "nic_lb_association" {
+    for_each = var.instance
+  network_interface_id    = azurerm_network_interface.web_nic[each.key].id
+  ip_configuration_name   = azurerm_network_interface.web_nic[each.key].ip_configuration[0].name
+backend_address_pool_id = azurerm_lb_backend_address_pool.web_lb_pool.id
+}
+
+output "lb_public_ip" {
+  value = azurerm_public_ip.lb_public_ip.ip_address
+}
