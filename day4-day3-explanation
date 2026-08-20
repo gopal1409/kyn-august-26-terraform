@@ -1,0 +1,357 @@
+Yes. The important thing to understand is that the reference block itself does not store information in the state file. The resource block tells Terraform what to create and how to identify it, and after terraform apply, Terraform records the resulting resource information in terraform.tfstate.
+
+Your example:
+
+resource "azurerm_resource_group" "myrg" {
+  name     = "${local.name_prefix}-${var.resource_group_name}"
+  location = var.location
+  tags     = local.project_tags
+}
+1. Understand the reference block
+
+This part:
+
+resource "azurerm_resource_group" "myrg"
+
+has two important names:
+
+resource "azurerm_resource_group" "myrg"
+          │                     │
+          │                     └── Your Terraform reference name
+          │
+          └── AzureRM resource type
+azurerm_resource_group
+
+This tells Terraform:
+
+"I want to manage an Azure Resource Group."
+
+myrg
+
+This is a user-defined Terraform local name/reference.
+
+You can call it:
+
+resource "azurerm_resource_group" "myrg"
+
+or:
+
+resource "azurerm_resource_group" "gopal_rg"
+
+or:
+
+resource "azurerm_resource_group" "production"
+
+Terraform doesn't care about the name itself, as long as you reference it consistently.
+
+2. What does myrg allow you to do?
+
+Once you define:
+
+resource "azurerm_resource_group" "myrg" {
+
+you can reference this resource from another Terraform resource.
+
+For example:
+
+resource "azurerm_virtual_network" "vnet" {
+  name = "gopal-vnet"
+
+
+  resource_group_name = azurerm_resource_group.myrg.name
+
+
+  location = azurerm_resource_group.myrg.location
+
+
+  address_space = ["10.0.0.0/16"]
+}
+
+Here:
+
+azurerm_resource_group.myrg.name
+
+means:
+
+Get the name attribute from the Resource Group represented by myrg.
+
+And:
+
+azurerm_resource_group.myrg.location
+
+means:
+
+Get the location attribute from that Resource Group.
+
+3. Your local and variable references
+
+You have:
+
+name = "${local.name_prefix}-${var.resource_group_name}"
+
+Terraform evaluates this expression.
+
+Suppose:
+
+local.name_prefix = "dev-sap"
+
+and:
+
+var.resource_group_name = "gopal-rg"
+
+Terraform creates:
+
+dev-sap-gopal-rg
+
+So:
+
+local.name_prefix
+       +
+var.resource_group_name
+       ↓
+dev-sap-gopal-rg
+
+Similarly:
+
+location = var.location
+
+might become:
+
+location = "eastus"
+
+And:
+
+tags = local.project_tags
+
+might become:
+
+Environment = dev
+Owner       = sap
+Project     = dispatch
+4. What happens when you run terraform plan?
+
+Terraform first reads your configuration.
+
+             Terraform Code
+                   │
+                   ▼
+       resource "azurerm_resource_group"
+                   │
+                   ▼
+              Evaluate
+          ┌────────┼─────────┐
+          ▼        ▼         ▼
+       locals   variables   references
+          │        │         │
+          └────────┼─────────┘
+                   ▼
+              Desired State
+                   │
+                   ▼
+            terraform plan
+
+Terraform determines:
+
+Resource:
+azurerm_resource_group.myrg
+
+
+Name:
+dev-sap-gopal-rg
+
+
+Location:
+eastus
+
+
+Tags:
+Environment = dev
+Owner = sap
+Project = dispatch
+
+Then it compares this desired configuration with the current Terraform state.
+
+5. What happens during terraform apply?
+
+When you execute:
+
+terraform apply
+
+Terraform communicates with Azure:
+
+Terraform
+   │
+   │ Azure Provider
+   ▼
+Microsoft Azure
+   │
+   ▼
+Resource Group Created
+
+Azure returns information about the resource.
+
+For example:
+
+Resource ID:
+ /subscriptions/xxx/resourceGroups/dev-sap-gopal-rg
+
+
+Name:
+ dev-sap-gopal-rg
+
+
+Location:
+ eastus
+
+Terraform then records the resource's information in its state.
+
+6. What is stored in terraform.tfstate?
+
+Conceptually, Terraform state contains something like:
+
+terraform.tfstate
+       │
+       └── Resources
+             │
+             └── azurerm_resource_group.myrg
+                    │
+                    ├── ID
+                    ├── Name
+                    ├── Location
+                    ├── Tags
+                    └── Other attributes
+
+The state lets Terraform remember:
+
+"I created this Azure Resource Group, and this is the real Azure resource associated with azurerm_resource_group.myrg."
+
+The actual state file contains much more information and should not be edited manually.
+
+7. Why is the reference important?
+
+Suppose later you create:
+
+resource "azurerm_virtual_network" "vnet" {
+  name                = "gopal-vnet"
+  resource_group_name = azurerm_resource_group.myrg.name
+  location            = azurerm_resource_group.myrg.location
+  address_space       = ["10.0.0.0/16"]
+}
+
+Terraform sees:
+
+azurerm_virtual_network.vnet
+             │
+             │ depends on
+             ▼
+azurerm_resource_group.myrg
+
+So Terraform understands the dependency:
+
+Resource Group
+      │
+      ▼
+Virtual Network
+      │
+      ▼
+Subnet
+      │
+      ▼
+NIC
+      │
+      ▼
+VM
+
+This is one of the most important purposes of resource references.
+
+8. The complete workflow
+┌──────────────────────────┐
+│ Terraform Configuration  │
+│                          │
+│ resource "azurerm_..."   │
+│ "myrg" {                 │
+│   name     = ...         │
+│   location = ...         │
+│   tags     = ...         │
+│ }                        │
+└────────────┬─────────────┘
+             │
+             ▼
+      terraform plan
+             │
+             ▼
+┌──────────────────────────┐
+│     Desired State        │
+│                          │
+│ dev-sap-gopal-rg         │
+│ eastus                   │
+│ tags                     │
+└────────────┬─────────────┘
+             │
+             ▼
+      terraform apply
+             │
+             ▼
+┌──────────────────────────┐
+│       Azure              │
+│                          │
+│ Resource Group Created   │
+└────────────┬─────────────┘
+             │
+             │ Resource information
+             ▼
+┌──────────────────────────┐
+│    terraform.tfstate     │
+│                          │
+│ azurerm_resource_group   │
+│ .myrg                    │
+│                          │
+│ ID                       │
+│ Name                     │
+│ Location                 │
+│ Tags                     │
+│ Attributes               │
+└──────────────────────────┘
+The key concept
+
+Think of it this way:
+
+resource "azurerm_resource_group" "myrg"
+        │                         │
+        │                         │
+        │                         └── Terraform reference/handle
+        │
+        └── What Azure resource Terraform manages
+
+Then:
+
+azurerm_resource_group.myrg.name
+              │
+              ▼
+       Get resource name
+
+and:
+
+azurerm_resource_group.myrg.location
+              │
+              ▼
+       Get resource location
+
+After terraform apply:
+
+Terraform Resource
+       │
+       ▼
+Azure Resource
+       │
+       ▼
+Terraform State
+       │
+       ▼
+terraform.tfstate
+
+So your statement "using the reference block I am storing all the resource information inside the state file" is slightly better stated as:
+
+The resource block creates a Terraform-managed resource and gives it a reference name. After Terraform creates or updates the resource, Terraform records the resource's identity and attributes in the state file. Other resources can use the reference to establish relationships and dependencies.
+
+That's the core concept behind Terraform's resource references + dependency graph + state management.
