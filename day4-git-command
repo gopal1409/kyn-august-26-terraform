@@ -32,3 +32,19 @@ git commit -m "start my calcy project"
 ls
   #git log will show the first version of your application
 git log
+##lets do another commit
+#if you look into calcy.py it has single line
+cat calcy.py
+#i am adding another line
+ echo "added multiple function" >> calcy.py
+#nopw cat command will show 2 lines
+   cat calcy.py
+#git status will show calcy.py has modified
+  541  git status
+#lets put calcy.py in staging area
+  542  git add calcy.py
+###commit and push it
+  543  git commit -m "added multiple function"
+#log will show there is two commit
+  544  git log
+  545  git push origin main
