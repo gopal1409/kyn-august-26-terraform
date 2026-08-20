@@ -1,0 +1,5 @@
+##first we will disable the public ip 
+  ##go to publicip.tf 
+  #comment the first and last line /*   */
+  ##then in network also we need to disable the public ip inside ip configration
+  #   public_ip_address_id          = azurerm_public_ip.web_public_ip[each.key].id
