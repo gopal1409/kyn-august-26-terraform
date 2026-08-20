@@ -1,0 +1,30 @@
+###go to the provider.tf delete everything paste this from line 2 till 21
+  terraform {
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "=5.0.0" #always provide the proiver version to avoid breaking changes in the future
+    }
+  }
+  backend "azurerm" {
+    resource_group_name = "changeittoyourstoragerg"
+    storage_account_name = "changeittoyoustorageaccountname"
+    container_name = "tfstate" #if you have given any other container name change it
+    key = "sky-project.tfstate" #inside the container the state file will be created with this name
+  }
+  
+}
+
+# Configure the Microsoft Azure Provider
+provider "azurerm" {
+  features {}
+}
+
+#then inside the backend block change the name of the storage account resource groupo
+  1. change the name of the storage account
+  3. change the containername
+  4. key you can put anything
+
+  ###terraform init
+  terraform plan
+  terraform apply
