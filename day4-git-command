@@ -40,11 +40,11 @@ cat calcy.py
 #nopw cat command will show 2 lines
    cat calcy.py
 #git status will show calcy.py has modified
-  541  git status
+   git status
 #lets put calcy.py in staging area
-  542  git add calcy.py
+  git add calcy.py
 ###commit and push it
-  543  git commit -m "added multiple function"
+   git commit -m "added multiple function"
 #log will show there is two commit
-  544  git log
-  545  git push origin main
+   git log
+  git push origin main
