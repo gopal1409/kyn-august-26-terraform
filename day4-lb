@@ -3,3 +3,31 @@
   #comment the first and last line /*   */
   ##then in network also we need to disable the public ip inside ip configration
   #   public_ip_address_id          = azurerm_public_ip.web_public_ip[each.key].id
+##create a new file lb.tf copy from line 8 till 33 then do terraform apply
+#public ip of lb
+resource "azurerm_public_ip" "lb_public_ip" {
+  #for each it pupose is to loop intial value var.instance two value
+  name                =  "${local.name_prefix}-lb-ip" #gopal-public-ip
+  resource_group_name = azurerm_resource_group.myrg.name       
+  location            = azurerm_resource_group.myrg.location
+  allocation_method   = "Static"
+  sku = "Standard" #basic #premium
+  tags = local.project_tags
+}
+
+#lets create the lb
+resource "azurerm_lb" "web_lb" {
+  name                = "${local.name_prefix}-lb"
+  location            = azurerm_resource_group.myrg.location
+  resource_group_name = azurerm_resource_group.myrg.name 
+
+  frontend_ip_configuration {
+    name                 = "PublicIPAddress"
+    public_ip_address_id = azurerm_public_ip.lb_public_ip.id
+  }
+}
+#backendpool
+resource "azurerm_lb_backend_address_pool" "web_lb_pool" {
+  loadbalancer_id = azurerm_lb.web_lb.id
+  name            = "${local.name_prefix}-lb-pool"
+}
