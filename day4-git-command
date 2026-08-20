@@ -1,0 +1,34 @@
+#lets chreatea a global varaible change it withy your name and email id
+  git config --global user.name "gopal"
+  git config --global user.email "gopal1409@gmail.com"
+#we will create a directory insid the directory we will create some files or folder
+   mkdir sky-project
+cd sky-project/
+  ###touch is an linux to create empty file
+touch DS_Store
+touch auth
+touch secret
+touch calcy.py
+ls
+git status
+  #git init is like an terraform init which will start tracking your all the files inisde the folder it is also called as working directory
+git init
+  #######
+git status
+
+#using echo command we will add a line inside your file
+echo "we started with a calcy program" > calcy.py
+  ##cat will show what content you have inside your file
+  cat calcy.py
+  ##ls is similar to dir
+ls
+  #######we will add calcy.py file from working directory to staging area
+  git add calcy.py
+  clear
+git status
+  ##finally we do a commit which will create a new version of your application. 
+git commit -m "start my calcy project"
+ git status
+ls
+  #git log will show the first version of your application
+git log
