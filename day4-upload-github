@@ -1,0 +1,14 @@
+##inside visual studio code create a file called as .gitignore
+  ####once created add this two line git will automatically stop tracking those files or filder
+  .terraform
+.terraform.lock.hcl
+
+  ####then in terminal
+  git init
+  git add .
+  git commit -m "terraform project"
+  git log
+  ###now go to remote repo i.e github
+  ###inside github create a new repo by clicking + icon from the top and copy all the command from the repo push existing code
+  #and paste it in the terminal
+  ##refresh the new repo you will see all your code
