@@ -24,6 +24,11 @@ provider "azurerm" {
   1. change the name of the storage account
   3. change the containername
   4. key you can put anything
+###inside your folder
+delete 
+.terraform
+tfstate
+tfstate.backup
 
   ###terraform init
   terraform plan
