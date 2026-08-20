@@ -1,6 +1,6 @@
 ##inside visual studio code create a file called as .gitignore
   ####once created add this two line git will automatically stop tracking those files or filder
-  .terraform
+.terraform
 .terraform.lock.hcl
 
   ####then in terminal
