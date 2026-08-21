@@ -1,0 +1,20 @@
+###create a new directory structure
+ #on your desktop create a new folder tf-module
+  #open visual studio code
+  #select that particular folder
+  ##inside the folde create a directory 
+  terraform-azure-web-platform
+  ##inside this directory create another directory called as modules
+  ##isnbide module create two directory compute another is networking
+  ###inside compute directory
+  ####add a file main.tf output.tf and variables.tf
+  ##inside netwokring directory 
+   ####add a file main.tf output.tf and variables.tf
+  ##finalyy you will have a directory structure like this
+  C:.
+└───terraform-azure-web-platform
+    └───modules
+        ├───compute
+        └───networking
+
+    ##tree command you can run which will show the directory structure
