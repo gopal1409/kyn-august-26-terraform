@@ -1,0 +1,1124 @@
+Yes. Your current configuration is a good candidate for converting into three Terraform modules:
+
+Root Module
+   │
+   ├── Networking Module
+   │      ├── VNet
+   │      ├── Subnet
+   │      ├── NSG
+   │      └── NSG Rules
+   │
+   ├── Compute Module
+   │      ├── NICs
+   │      └── Linux VMs
+   │
+   └── Load Balancer Module
+          ├── Public IP
+          ├── Load Balancer
+          ├── Backend Pool
+          ├── Health Probe
+          ├── LB Rule
+          └── NIC → Backend Association
+
+The important Terraform concept is that the local machine only calls the root module, while the root module calls the modules stored in GitHub.
+
+1. Final GitHub repository structure
+
+Create a GitHub repository such as:
+
+terraform-azure-web-platform
+
+Use this structure:
+
+terraform-azure-web-platform/
+│
+├── modules/
+│   │
+│   ├── networking/
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   └── outputs.tf
+│   │
+│   ├── compute/
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   └── outputs.tf
+│   │
+│   └── loadbalancer/
+│       ├── main.tf
+│       ├── variables.tf
+│       └── outputs.tf
+│
+├── main.tf
+├── variables.tf
+├── locals.tf
+├── provider.tf
+├── outputs.tf
+├── terraform.tfvars
+└── app/
+    └── app.sh
+
+I recommend not putting your Azure backend configuration inside the reusable modules. The backend belongs in the root configuration.
+
+2. Root provider.tf
+terraform {
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "=5.0.0"
+    }
+  }
+
+
+  backend "azurerm" {
+    resource_group_name  = "gopal-storage-state"
+    storage_account_name = "gopaltfstate"
+    container_name       = "tfstate"
+    key                  = "sky-project.tfstate"
+  }
+}
+
+
+provider "azurerm" {
+  features {}
+}
+
+Your state is therefore stored remotely:
+
+Azure Storage Account
+        │
+        ▼
+     tfstate
+        │
+        ▼
+sky-project.tfstate
+3. Root variables.tf
+
+Put your input variables here:
+
+variable "location" {
+  description = "Azure region"
+  type        = string
+  default     = "eastus"
+}
+
+
+variable "resource_group_name" {
+  description = "Resource group name"
+  type        = string
+  default     = "gopal-rg"
+}
+
+
+variable "vnet_name" {
+  description = "Virtual network name"
+  type        = string
+  default     = "gopal-network"
+}
+
+
+variable "subnet_name" {
+  description = "Subnet name"
+  type        = string
+  default     = "websubnet"
+}
+
+
+variable "address_space" {
+  description = "VNet address space"
+  type        = list(string)
+  default     = ["10.0.0.0/16"]
+}
+
+
+variable "environment" {
+  description = "Environment"
+  type        = string
+  default     = "dev"
+}
+
+
+variable "owner" {
+  description = "Owner"
+  type        = string
+  default     = "sap"
+}
+
+
+variable "instance" {
+  description = "VM instances"
+
+
+  type = map(string)
+
+
+  default = {
+    vm001 = "vm1"
+    vm002 = "vm2"
+  }
+}
+
+
+variable "vm_instance_size" {
+  description = "VM size by environment"
+
+
+  type = map(string)
+
+
+  default = {
+    testing     = "Standard_B1s"
+    development = "Standard_F2"
+    production  = "Standard_D2s_v3"
+  }
+}
+4. Root locals.tf
+locals {
+  name_prefix = "${var.environment}-${var.owner}"
+
+
+  project_tags = {
+    Environment = var.environment
+    Owner       = var.owner
+    Project     = "dispatch"
+  }
+}
+
+Notice that instead of hardcoding:
+
+Environment = "dev"
+
+we use:
+
+Environment = var.environment
+
+This makes the module reusable for dev/test/prod.
+
+5. Networking module
+
+Create:
+
+modules/networking/
+├── main.tf
+├── variables.tf
+└── outputs.tf
+modules/networking/variables.tf
+variable "name_prefix" {
+  type = string
+}
+
+
+variable "resource_group_name" {
+  type = string
+}
+
+
+variable "location" {
+  type = string
+}
+
+
+variable "vnet_name" {
+  type = string
+}
+
+
+variable "subnet_name" {
+  type = string
+}
+
+
+variable "address_space" {
+  type = list(string)
+}
+
+
+variable "project_tags" {
+  type = map(string)
+}
+modules/networking/main.tf
+resource "azurerm_virtual_network" "vnet" {
+  name                = "${var.name_prefix}-${var.vnet_name}"
+  location            = var.location
+  resource_group_name = var.resource_group_name
+
+
+  address_space = var.address_space
+
+
+  tags = var.project_tags
+}
+
+
+resource "azurerm_subnet" "web_subnet" {
+  name                 = "${var.name_prefix}-${var.subnet_name}"
+  resource_group_name  = var.resource_group_name
+  virtual_network_name = azurerm_virtual_network.vnet.name
+
+
+  address_prefixes = ["10.0.1.0/24"]
+}
+
+
+resource "azurerm_network_security_group" "web_nsg" {
+  name                = "${var.name_prefix}-nsg"
+  location            = var.location
+  resource_group_name = var.resource_group_name
+
+
+  tags = var.project_tags
+}
+
+
+locals {
+  web_nsg_rule = {
+    "110" = "3389"
+    "120" = "80"
+    "130" = "443"
+    "140" = "22"
+    "144" = "8080"
+  }
+}
+
+
+resource "azurerm_network_security_rule" "web_nsg" {
+  for_each = local.web_nsg_rule
+
+
+  name                        = "Rule_port_${each.key}"
+  priority                    = tonumber(each.key)
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = each.value
+  source_address_prefix      = "*"
+  destination_address_prefix = "*"
+
+
+  resource_group_name         = var.resource_group_name
+  network_security_group_name = azurerm_network_security_group.web_nsg.name
+}
+
+
+resource "azurerm_subnet_network_security_group_association" "web_subnet_nsg" {
+  subnet_id                 = azurerm_subnet.web_subnet.id
+  network_security_group_id = azurerm_network_security_group.web_nsg.id
+}
+modules/networking/outputs.tf
+output "subnet_id" {
+  value = azurerm_subnet.web_subnet.id
+}
+
+
+output "nsg_id" {
+  value = azurerm_network_security_group.web_nsg.id
+}
+
+
+output "vnet_id" {
+  value = azurerm_virtual_network.vnet.id
+}
+6. Compute module
+
+Create:
+
+modules/compute/
+├── main.tf
+├── variables.tf
+└── outputs.tf
+modules/compute/variables.tf
+variable "name_prefix" {
+  type = string
+}
+
+
+variable "location" {
+  type = string
+}
+
+
+variable "resource_group_name" {
+  type = string
+}
+
+
+variable "subnet_id" {
+  type = string
+}
+
+
+variable "instance" {
+  type = map(string)
+}
+
+
+variable "vm_size" {
+  type = string
+}
+
+
+variable "ssh_public_key" {
+  type = string
+}
+modules/compute/main.tf
+NICs
+resource "azurerm_network_interface" "web_nic" {
+  for_each = var.instance
+
+
+  name                = "${var.name_prefix}-${each.key}-nic"
+  location            = var.location
+  resource_group_name = var.resource_group_name
+
+
+  ip_configuration {
+    name                          = "internal"
+    subnet_id                     = var.subnet_id
+    private_ip_address_allocation = "Dynamic"
+  }
+}
+Linux VMs
+resource "azurerm_linux_virtual_machine" "web_vm" {
+  for_each = var.instance
+
+
+  name                = "${var.name_prefix}-${each.key}-vm"
+  location            = var.location
+  resource_group_name = var.resource_group_name
+
+
+  size = var.vm_size
+
+
+  admin_username = "azureuser"
+
+
+  network_interface_ids = [
+    azurerm_network_interface.web_nic[each.key].id
+  ]
+
+
+  admin_ssh_key {
+    username   = "azureuser"
+    public_key = var.ssh_public_key
+  }
+
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+  }
+
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-server-jammy"
+    sku       = "22_04-lts"
+    version   = "latest"
+  }
+
+
+  custom_data = filebase64(
+    "${path.root}/app/app.sh"
+  )
+}
+
+Notice this:
+
+for_each = var.instance
+
+If you have:
+
+instance = {
+  vm001 = "vm1"
+  vm002 = "vm2"
+}
+
+Terraform creates:
+
+vm001 → NIC → VM
+vm002 → NIC → VM
+modules/compute/outputs.tf
+output "nic_ids" {
+  value = {
+    for name, nic in azurerm_network_interface.web_nic :
+    name => nic.id
+  }
+}
+
+
+output "vm_ids" {
+  value = {
+    for name, vm in azurerm_linux_virtual_machine.web_vm :
+    name => vm.id
+  }
+}
+
+
+output "private_ips" {
+  value = {
+    for name, nic in azurerm_network_interface.web_nic :
+    name => nic.private_ip_address
+  }
+}
+7. Load Balancer module
+
+Create:
+
+modules/loadbalancer/
+├── main.tf
+├── variables.tf
+└── outputs.tf
+variables.tf
+variable "name_prefix" {
+  type = string
+}
+
+
+variable "location" {
+  type = string
+}
+
+
+variable "resource_group_name" {
+  type = string
+}
+
+
+variable "instance" {
+  type = map(string)
+}
+
+
+variable "nic_ids" {
+  type = map(string)
+}
+8. loadbalancer/main.tf
+Public IP
+resource "azurerm_public_ip" "lb_public_ip" {
+  name                = "${var.name_prefix}-lb-ip"
+  resource_group_name = var.resource_group_name
+  location            = var.location
+
+
+  allocation_method = "Static"
+  sku               = "Standard"
+}
+Load Balancer
+resource "azurerm_lb" "web_lb" {
+  name                = "${var.name_prefix}-lb"
+  location            = var.location
+  resource_group_name = var.resource_group_name
+
+
+  frontend_ip_configuration {
+    name                 = "PublicIPAddress"
+    public_ip_address_id = azurerm_public_ip.lb_public_ip.id
+  }
+}
+Backend Pool
+resource "azurerm_lb_backend_address_pool" "web_lb_pool" {
+  loadbalancer_id = azurerm_lb.web_lb.id
+  name            = "${var.name_prefix}-lb-pool"
+}
+Health Probe
+resource "azurerm_lb_probe" "web_lb_probe" {
+  loadbalancer_id = azurerm_lb.web_lb.id
+
+
+  name     = "${var.name_prefix}-lb-probe"
+  protocol = "Tcp"
+  port     = 80
+
+
+  interval_in_seconds = 30
+  number_of_probes    = 2
+}
+Load Balancer Rule
+resource "azurerm_lb_rule" "web_lb_rule" {
+  loadbalancer_id = azurerm_lb.web_lb.id
+
+
+  name     = "${var.name_prefix}-lb-rule"
+  protocol = "Tcp"
+
+
+  frontend_port = 80
+  backend_port  = 80
+
+
+  frontend_ip_configuration_name = (
+    azurerm_lb.web_lb.frontend_ip_configuration[0].name
+  )
+
+
+  backend_address_pool_ids = [
+    azurerm_lb_backend_address_pool.web_lb_pool.id
+  ]
+
+
+  probe_id = azurerm_lb_probe.web_lb_probe.id
+}
+Attach NICs to Backend Pool
+resource "azurerm_network_interface_backend_address_pool_association" "nic_lb_association" {
+  for_each = var.instance
+
+
+  network_interface_id = var.nic_ids[each.key]
+
+
+  ip_configuration_name = "internal"
+
+
+  backend_address_pool_id = (
+    azurerm_lb_backend_address_pool.web_lb_pool.id
+  )
+}
+outputs.tf
+output "lb_public_ip" {
+  value = azurerm_public_ip.lb_public_ip.ip_address
+}
+
+
+output "lb_id" {
+  value = azurerm_lb.web_lb.id
+}
+9. Root main.tf
+
+Now your root configuration becomes very simple.
+
+resource "azurerm_resource_group" "myrg" {
+  name     = "${local.name_prefix}-${var.resource_group_name}"
+  location = var.location
+
+
+  tags = local.project_tags
+}
+
+Then call the networking module:
+
+module "networking" {
+  source = "./modules/networking"
+
+
+  name_prefix = local.name_prefix
+
+
+  resource_group_name = azurerm_resource_group.myrg.name
+  location            = azurerm_resource_group.myrg.location
+
+
+  vnet_name      = var.vnet_name
+  subnet_name    = var.subnet_name
+  address_space = var.address_space
+
+
+  project_tags = local.project_tags
+}
+
+Call the compute module:
+
+module "compute" {
+  source = "./modules/compute"
+
+
+  name_prefix = local.name_prefix
+
+
+  resource_group_name = azurerm_resource_group.myrg.name
+  location            = azurerm_resource_group.myrg.location
+
+
+  subnet_id = module.networking.subnet_id
+
+
+  instance = var.instance
+
+
+  vm_size = var.vm_instance_size["development"]
+
+
+  ssh_public_key = file(
+    "${path.module}/ssh-keys/terraform-azure.pem.pub"
+  )
+}
+
+Notice this:
+
+subnet_id = module.networking.subnet_id
+
+This is module-to-module communication through outputs.
+
+Then call the Load Balancer:
+
+module "loadbalancer" {
+  source = "./modules/loadbalancer"
+
+
+  name_prefix = local.name_prefix
+
+
+  resource_group_name = azurerm_resource_group.myrg.name
+  location            = azurerm_resource_group.myrg.location
+
+
+  instance = var.instance
+
+
+  nic_ids = module.compute.nic_ids
+}
+
+Now Terraform understands:
+
+Resource Group
+      │
+      ▼
+Networking Module
+      │
+      │ subnet_id
+      ▼
+Compute Module
+      │
+      │ nic_ids
+      ▼
+Load Balancer Module
+10. Root outputs
+
+Create outputs.tf:
+
+output "resource_group_name" {
+  value = azurerm_resource_group.myrg.name
+}
+
+
+output "load_balancer_public_ip" {
+  value = module.loadbalancer.lb_public_ip
+}
+
+
+output "vm_private_ips" {
+  value = module.compute.private_ips
+}
+
+
+output "vnet_id" {
+  value = module.networking.vnet_id
+}
+
+After:
+
+terraform apply
+
+you can get:
+
+terraform output
+
+For only the LB IP:
+
+terraform output load_balancer_public_ip
+11. app/app.sh
+
+Your existing script can remain:
+
+#!/bin/bash
+
+
+apt-get update -y
+apt-get install -y nginx
+
+
+systemctl enable nginx
+systemctl start nginx
+
+
+HOSTNAME=$(hostname)
+
+
+cat > /var/www/html/index.html <<EOF
+<html>
+<head>
+    <title>Terraform Web Server</title>
+</head>
+<body>
+    <h1>Hello from Terraform</h1>
+    <h2>Server: $HOSTNAME</h2>
+</body>
+</html>
+EOF
+
+Now both VMs install NGINX.
+
+The Load Balancer distributes:
+
+Internet
+    │
+    ▼
+Azure Load Balancer
+    │
+    ├──────────────┐
+    ▼              ▼
+ VM001            VM002
+ NGINX            NGINX
+12. Call the Terraform module from your local machine
+
+There are two ways.
+
+Option A — Modules in the same project
+
+For your training lab:
+
+module "networking" {
+  source = "./modules/networking"
+}
+
+This is a local module.
+
+13. GitHub module
+
+After uploading the modules to GitHub, your root configuration can call them directly.
+
+For example:
+
+module "networking" {
+  source = "git::https://github.com/YOUR_USERNAME/terraform-azure-web-platform.git//modules/networking?ref=v1.0.0"
+
+
+  name_prefix = local.name_prefix
+
+
+  resource_group_name = azurerm_resource_group.myrg.name
+  location            = azurerm_resource_group.myrg.location
+
+
+  vnet_name      = var.vnet_name
+  subnet_name    = var.subnet_name
+  address_space  = var.address_space
+
+
+  project_tags = local.project_tags
+}
+
+Similarly:
+
+module "compute" {
+  source = "git::https://github.com/YOUR_USERNAME/terraform-azure-web-platform.git//modules/compute?ref=v1.0.0"
+
+
+  name_prefix = local.name_prefix
+
+
+  resource_group_name = azurerm_resource_group.myrg.name
+  location            = azurerm_resource_group.myrg.location
+
+
+  subnet_id = module.networking.subnet_id
+
+
+  instance = var.instance
+
+
+  vm_size = var.vm_instance_size["development"]
+
+
+  ssh_public_key = file(
+    "${path.module}/ssh-keys/terraform-azure.pem.pub"
+  )
+}
+
+And:
+
+module "loadbalancer" {
+  source = "git::https://github.com/YOUR_USERNAME/terraform-azure-web-platform.git//modules/loadbalancer?ref=v1.0.0"
+
+
+  name_prefix = local.name_prefix
+
+
+  resource_group_name = azurerm_resource_group.myrg.name
+  location            = azurerm_resource_group.myrg.location
+
+
+  instance = var.instance
+  nic_ids  = module.compute.nic_ids
+}
+
+Using a Git tag such as ?ref=v1.0.0 is preferable to always using the changing main branch for reproducible deployments.
+
+14. Upload the module to GitHub
+
+From your local project:
+
+git init
+
+Configure Git if you haven't already:
+
+git config --global user.name "Gopal Das"
+git config --global user.email "YOUR_EMAIL"
+
+Add files:
+
+git add .
+
+Commit:
+
+git commit -m "Create Azure Terraform modules"
+
+Add your GitHub repository:
+
+git remote add origin https://github.com/YOUR_USERNAME/terraform-azure-web-platform.git
+
+Push:
+
+git branch -M main
+git push -u origin main
+
+Your repository will look like:
+
+GitHub
+│
+└── terraform-azure-web-platform
+      │
+      └── modules
+           ├── networking
+           ├── compute
+           └── loadbalancer
+15. Calling the GitHub module from another local machine
+
+On another RDP machine:
+
+mkdir terraform-project
+cd terraform-project
+
+Create your root files:
+
+terraform-project/
+├── provider.tf
+├── main.tf
+├── variables.tf
+├── locals.tf
+├── outputs.tf
+├── terraform.tfvars
+└── ssh-keys/
+    └── terraform-azure.pem.pub
+
+Then in main.tf:
+
+module "networking" {
+  source = "git::https://github.com/YOUR_USERNAME/terraform-azure-web-platform.git//modules/networking?ref=v1.0.0"
+
+
+  # variables...
+}
+
+Run:
+
+terraform init
+
+Terraform will download the module:
+
+Local Machine
+     │
+     │ terraform init
+     ▼
+GitHub
+     │
+     ▼
+Terraform Module
+     │
+     ▼
+.terraform/modules/
+
+Then:
+
+terraform validate
+terraform plan
+terraform apply
+16. Pass variables from the local machine
+
+This is another important part.
+
+Create:
+
+terraform.tfvars
+location            = "eastus"
+resource_group_name = "gopal-rg"
+
+
+vnet_name   = "gopal-network"
+subnet_name = "websubnet"
+
+
+environment = "dev"
+owner       = "sap"
+
+
+address_space = [
+  "10.0.0.0/16"
+]
+
+
+instance = {
+  vm001 = "vm1"
+  vm002 = "vm2"
+}
+
+
+vm_instance_size = {
+  testing     = "Standard_B1s"
+  development = "Standard_F2"
+  production  = "Standard_D2s_v3"
+}
+
+Then simply run:
+
+terraform plan
+
+Terraform automatically reads terraform.tfvars.
+
+You can also explicitly specify it:
+
+terraform plan -var-file="terraform.tfvars"
+17. Better: different environment files
+
+You can have:
+
+dev.tfvars
+test.tfvars
+prod.tfvars
+dev.tfvars
+environment = "dev"
+
+
+instance = {
+  vm001 = "vm1"
+  vm002 = "vm2"
+}
+prod.tfvars
+environment = "prod"
+
+
+instance = {
+  vm001 = "vm1"
+  vm002 = "vm2"
+  vm003 = "vm3"
+  vm004 = "vm4"
+}
+
+Then:
+
+terraform plan -var-file="dev.tfvars"
+
+or:
+
+terraform plan -var-file="prod.tfvars"
+
+This gives you:
+
+                 GitHub Modules
+                       │
+                       ▼
+              ┌─────────────────┐
+              │ Local Machine    │
+              │                 │
+              │ dev.tfvars      │
+              │ prod.tfvars     │
+              └────────┬────────┘
+                       │
+                       ▼
+                  Terraform
+                       │
+             ┌─────────┼─────────┐
+             ▼         ▼         ▼
+        Networking   Compute   Load Balancer
+             │         │         │
+             └─────────┼─────────┘
+                       ▼
+                    Azure
+18. Important correction to your current Key Vault configuration
+
+You currently have:
+
+data "azurerm_key_vault_secret" "mysecret" {
+  name         = "winpass"
+  key_vault_id = data.azurerm_key_vault.mywinvault.id
+}
+
+That is fine if this project needs the secret, but don't put the secret value into GitHub.
+
+Also don't commit:
+
+terraform.tfstate
+terraform.tfstate.backup
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+
+Create .gitignore:
+
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+crash.log
+crash.*.log
+
+
+*.pem
+*.key
+
+If you have a public GitHub repository, never commit passwords, service-principal secrets, SSH private keys, or Key Vault secret values.
+
+Your .pub SSH key is generally okay to distribute, but the corresponding private key must stay private.
+
+19. The final architecture
+
+Your project has now become a reusable Terraform platform:
+
+                         GitHub
+                           │
+             terraform-azure-web-platform
+                           │
+             ┌─────────────┼─────────────┐
+             │             │             │
+             ▼             ▼             ▼
+        Networking       Compute     Load Balancer
+          Module          Module          Module
+             │             │             │
+             ▼             ▼             ▼
+           VNet           NICs            LB
+             │             │               │
+           Subnet          │          Backend Pool
+             │             │               │
+            NSG            │          Health Probe
+             │             │               │
+             └─────────────┼───────────────┘
+                           │
+                           ▼
+                        Azure
+                           │
+                    ┌──────┴──────┐
+                    ▼             ▼
+                  VM001         VM002
+                  NGINX         NGINX
+                    └──────┬──────┘
+                           │
+                           ▼
+                    Load Balancer
+                           │
+                           ▼
+                     Public IP
+
+And your Terraform state is separate:
+
+Terraform
+    │
+    ▼
+Azure Storage Account
+    │
+    └── tfstate
+          │
+          └── sky-project.tfstate
+
+The key learning point is that modules contain reusable infrastructure logic, variables provide inputs, outputs expose information between modules, and the root module orchestrates everything. Your local machine only needs the root configuration, while terraform init downloads the reusable modules from
