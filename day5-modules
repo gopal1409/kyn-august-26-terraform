@@ -43,3 +43,122 @@ git commit -m "terraform azure module"
 ######################################
 ##create a new repo in github 
 ###get the push command and push it to github
+
+#inside networking folder main.tf copy from line 49 till 115
+#vnet
+resource "azurerm_virtual_network" "vnet" {
+  name                = "${var.name_prefix}-${var.vnet_name}" #gopal-network
+  location            = azurerm_resource_group.myrg.location    #it will read your stae file and get the location of resource group
+  resource_group_name = azurerm_resource_group.myrg.name
+  address_space       = var.address_space
+  tags                = var.project_tags
+
+}
+
+#ssubnet
+#subnet need two information
+# vnet name and resource group 
+resource "azurerm_subnet" "web_subnet" {
+  name                 = "${var.name_prefix}-${var.subnet_name}" #websubnet-subnet
+  resource_group_name  = azurerm_resource_group.myrg.name
+  virtual_network_name = azurerm_virtual_network.vnet.name
+  address_prefixes     = ["10.0.1.0/24"]
+
+
+}
+#nsg
+##we need to create an nsg
+
+resource "azurerm_network_security_group" "web_nsg" {
+  name                = "${var.name_prefix}-nsg"
+  location            = azurerm_resource_group.myrg.location
+  resource_group_name = azurerm_resource_group.myrg.name
+
+  tags = var.project_tags
+}
+##this nsg need to be mapped with whom subnet
+resource "azurerm_subnet_network_security_group_association" "web_subnet_nsg_association" {
+
+  subnet_id                 = azurerm_subnet.web_subnet.id              #change it to your subnet refrence block
+  network_security_group_id = azurerm_network_security_group.web_nsg.id #change it to your refrence block
+}
+##inside the nsg we need to create rules for inbound traffic
+#inside nsg we need to allow some port 22 , 80 , 443 i cant take this port as range
+locals {
+  web_nsg_rule = { #named expression
+    "110" : "3389",  #expression on key value format seprated priority and port number
+    "120" : "80",
+    "130" : "443",
+    "140" : 22,
+    "144" : 8080,
+  }
+}
+
+/*
+locals {
+  ports = csvdecode(file("${path.module}/ports.csv"))
+}*/
+resource "azurerm_network_security_rule" "web_nsg" {
+ for_each                    = local.web_nsg_rule
+
+  name                        = "Rule_port_${each.key}" #Rule_port_110
+  priority                    = each.key                #110
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = each.value #22
+  source_address_prefix       = "*"        #0.0.0.0/0
+  destination_address_prefix  = "*"
+  resource_group_name         = azurerm_resource_group.myrg.name
+  network_security_group_name = azurerm_network_security_group.web_nsg.name
+}
+##inside varaibles.tf in networking folder copy from line 117 till 147
+variable "name_prefix" {
+  type = string
+}
+variable "resource_group_name" {
+  type = string
+}
+
+variable "location" {
+  type = string 
+}
+
+variable "vnet_name" {
+  
+  type        = string
+  
+}
+
+variable "subnet_name" {
+  
+  type        = string
+
+}
+
+variable "address_space" {
+ 
+  type        = list(string)
+ 
+}
+variable "project_tags" {
+  type = map(string)
+}
+##inside networking folder output.tf add this line 
+output "subnet_id" {
+  value = azurerm_subnet.web_subnet.id 
+}
+
+output "nsg_id" {
+  value = azurerm_network_security_group.web_nsg.id
+}
+
+output "vnet_id" {
+  value = azurerm_virtual_network.vnet.id
+}
+
+##once done 
+git add .
+git commit -m "added networking tf files"
+git push origin main
