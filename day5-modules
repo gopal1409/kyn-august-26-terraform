@@ -36,3 +36,10 @@ terraform-azure-web-platform/
 │       ├── main.tf
 │       ├── variables.tf
 │       └── outputs.tf
+###########################
+git init
+git add .
+git commit -m "terraform azure module"
+######################################
+##create a new repo in github 
+###get the push command and push it to github
