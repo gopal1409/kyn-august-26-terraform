@@ -1,0 +1,296 @@
+If you want to create an Azure Windows VM with a separate managed data disk, attach it to the VM, and later increase the disk size using Terraform, use the following structure.
+
+1. Create the Windows VM
+resource "azurerm_windows_virtual_machine" "winvm" {
+  name                = "gopal-win-vm"
+  resource_group_name = azurerm_resource_group.myrg.name
+  location            = azurerm_resource_group.myrg.location
+
+
+  size           = "Standard_B2s"
+  admin_username = "azureadmin"
+  admin_password = var.admin_password
+
+
+  network_interface_ids = [
+    azurerm_network_interface.web_nic.id
+  ]
+
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+
+
+    # OS disk size
+    disk_size_gb = 128
+  }
+
+
+  source_image_reference {
+    publisher = "MicrosoftWindowsServer"
+    offer     = "WindowsServer"
+    sku       = "2022-datacenter-azure-edition"
+    version   = "latest"
+  }
+}
+
+Here:
+
+disk_size_gb = 128
+
+controls the OS disk size.
+
+2. Create a separate data disk
+
+For application/data storage, I recommend creating a separate managed disk.
+
+resource "azurerm_managed_disk" "data_disk" {
+  name                 = "gopal-win-data-disk"
+  location             = azurerm_resource_group.myrg.location
+  resource_group_name  = azurerm_resource_group.myrg.name
+
+
+  storage_account_type = "Standard_LRS"
+  create_option        = "Empty"
+
+
+  disk_size_gb = 100
+
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+
+  tags = {
+    Environment = "dev"
+    Purpose     = "Application-Data"
+  }
+}
+
+Initially:
+
+Data Disk = 100 GB
+
+The prevent_destroy is useful if this disk contains important data.
+
+3. Attach the disk to the Windows VM
+resource "azurerm_virtual_machine_data_disk_attachment" "data_disk_attachment" {
+  managed_disk_id    = azurerm_managed_disk.data_disk.id
+  virtual_machine_id = azurerm_windows_virtual_machine.winvm.id
+
+
+  lun     = 0
+  caching = "ReadWrite"
+}
+
+The architecture is now:
+
+Azure
+ │
+ └── Windows VM
+       │
+       ├── OS Disk
+       │     └── 128 GB
+       │
+       └── Data Disk
+             └── 100 GB
+4. Change the data disk from 100 GB to 200 GB
+
+Later, simply change:
+
+disk_size_gb = 100
+
+to:
+
+disk_size_gb = 200
+
+Then:
+
+terraform plan
+
+Terraform should detect that the managed disk needs to be resized.
+
+Then:
+
+terraform apply
+
+Azure will resize the managed disk.
+
+The configuration becomes:
+
+resource "azurerm_managed_disk" "data_disk" {
+  name                 = "gopal-win-data-disk"
+  location             = azurerm_resource_group.myrg.location
+  resource_group_name  = azurerm_resource_group.myrg.name
+
+
+  storage_account_type = "Standard_LRS"
+  create_option        = "Empty"
+
+
+  disk_size_gb = 200
+
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+5. Important: Azure disk vs Windows partition
+
+There are two different sizes to understand.
+
+Terraform
+   │
+   ▼
+Azure Managed Disk
+   │
+   │ 200 GB
+   ▼
+Windows Disk
+   │
+   ▼
+Partition / Volume
+   │
+   ▼
+D:
+
+Increasing:
+
+disk_size_gb = 100
+
+to:
+
+disk_size_gb = 200
+
+increases the Azure managed disk.
+
+You may still need to extend the Windows partition/volume inside Windows so that the operating system uses the additional space.
+
+6. Automatically initialize the disk as D:
+
+For a new Windows VM, you can use a PowerShell script.
+
+For example, initialize-disk.ps1:
+
+$disk = Get-Disk |
+    Where-Object PartitionStyle -Eq 'RAW' |
+    Select-Object -First 1
+
+
+if ($disk) {
+
+
+    Initialize-Disk `
+        -Number $disk.Number `
+        -PartitionStyle GPT `
+        -PassThru |
+    New-Partition `
+        -UseMaximumSize `
+        -DriveLetter D |
+    Format-Volume `
+        -FileSystem NTFS `
+        -NewFileSystemLabel "Data" `
+        -Confirm:$false
+}
+
+Then you can run it using an Azure VM extension.
+
+resource "azurerm_virtual_machine_extension" "disk_setup" {
+  name               = "initialize-data-disk"
+  virtual_machine_id = azurerm_windows_virtual_machine.winvm.id
+
+
+  publisher            = "Microsoft.Compute"
+  type                 = "CustomScriptExtension"
+  type_handler_version = "1.10"
+
+
+  settings = jsonencode({
+    fileUris = [
+      "https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main/initialize-disk.ps1"
+    ]
+
+
+    commandToExecute = "powershell.exe -ExecutionPolicy Bypass -File initialize-disk.ps1"
+  })
+
+
+  depends_on = [
+    azurerm_virtual_machine_data_disk_attachment.data_disk_attachment
+  ]
+}
+7. What happens when you increase the disk?
+
+Initially:
+
+Azure
+ │
+ └── Windows VM
+       │
+       └── Data Disk
+             │
+             └── 100 GB
+
+Change Terraform:
+
+disk_size_gb = 200
+
+Run:
+
+terraform plan
+
+Then:
+
+terraform apply
+
+Result:
+
+Azure
+ │
+ └── Windows VM
+       │
+       └── Data Disk
+             │
+             └── 200 GB
+
+The disk is expanded, not recreated, provided the requested size is a supported increase.
+
+8. Recommended production design
+
+For your earlier requirement of avoiding data loss during terraform destroy, keep the VM and data disk as separate Terraform resources:
+
+                 Windows VM
+                     │
+          ┌──────────┴──────────┐
+          │                     │
+       OS Disk              Data Disk
+       128 GB                200 GB
+          │                     │
+       VM lifecycle       prevent_destroy
+                                  │
+                                  ▼
+                            Persistent Data
+
+Terraform can then manage the VM lifecycle separately from the application data.
+
+One important rule
+
+Managed disks can generally be expanded, but shrinking an existing Azure managed disk is not supported.
+
+So plan:
+
+100 GB
+  ↓
+200 GB
+  ↓
+500 GB
+
+rather than:
+
+500 GB
+  ↓
+200 GB   ❌
+
+Also remember that expanding the Azure disk does not automatically guarantee that the Windows volume/partition has been extended; handle that separately with PowerShell or Windows disk management
