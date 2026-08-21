@@ -18,3 +18,21 @@
         └───networking
 
     ##tree command you can run which will show the directory structure
+terraform-azure-web-platform/
+│
+├── modules/
+│   │
+│   ├── networking/
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   └── outputs.tf
+│   │
+│   ├── compute/
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   └── outputs.tf
+│   │
+│   └── loadbalancer/
+│       ├── main.tf
+│       ├── variables.tf
+│       └── outputs.tf
